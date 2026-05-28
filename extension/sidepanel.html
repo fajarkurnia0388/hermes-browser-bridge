@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Browser Bridge Control Panel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Hermes Bridge v0.3</h1>
+      <span class="status-badge connected" id="status-text">Menunggu Koneksi...</span>
+    </header>
+
+    <main>
+      <section class="control-panel">
+        <h2>Kontrol & Keamanan</h2>
+        <div class="control-group">
+          <label class="switch-container">
+            <input type="checkbox" id="auth-check" checked disabled>
+            <span class="switch-slider"></span>
+          </label>
+          <div class="control-info">
+            <span class="control-title">Native Messaging Host</span>
+            <span class="control-desc">Mengamankan komunikasi dari proses lokal luar</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="logs-container">
+        <h2>Log Aktivitas Agen</h2>
+        <div class="log-box" id="log-box">
+          <div class="log-entry system">Ekstensi Hermes Bridge siap digunakan.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <button class="btn btn-clear" id="btn-clear">Bersihkan Log</button>
+    </footer>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

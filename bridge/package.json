@@ -1,0 +1,14 @@
+{
+  "name": "hermes-browser-bridge",
+  "version": "0.3.0",
+  "description": "Local Bridge untuk AI Agent dan Chrome Extension",
+  "main": "index.js",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "node index.js"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "com.hermes.bridge",
+  "description": "Hermes Browser Bridge Native Messaging Host",
+  "path": "/home/void/lab/experiments/bridge_browser/hermes-browser-bridge/bridge/native-host.js",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://fjpklhmjdfdpppefagifchffedgfkfbl/",
+    "chrome-extension://cpaemepibmlglpphmoadepdbldphflgg/"
+  ]
+}
