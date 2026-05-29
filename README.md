@@ -114,7 +114,9 @@ Contribution suggestions:
 
 ## License
 
-The project license is not yet specified in the repo. Add a `LICENSE` file if you want to set a public license.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2026 Fajar Kurnia
 
 ---
 

@@ -114,14 +114,10 @@ Saran kontribusi:
 
 ## License
 
-Lisensi projek belum dispesifikasikan dalam repo. Tambahkan file `LICENSE` jika ingin mengatur lisensi publik.
+Proyek ini dilisensikan di bawah **MIT License** — lihat file [LICENSE](LICENSE) untuk detail lengkap.
+
+Copyright (c) 2026 Fajar Kurnia
 
 ---
 
-Jika Anda mau, saya bisa:
-
-- Menambahkan contoh payload lengkap untuk tiap tool.
-- Menambahkan badge status build atau license.
-- Menerjemahkan README ini ke Bahasa Inggris.
-
-Silakan beri tahu mana yang ingin Anda tambahkan atau ubah.
+**Tersedia dalam bahasa lain:** [English](README.md)
