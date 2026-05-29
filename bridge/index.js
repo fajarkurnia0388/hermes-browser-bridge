@@ -299,6 +299,68 @@ function getToolDefinitions() {
         properties: { tabId: { type: 'number', description: 'ID tab tujuan' } },
         required: ['tabId']
       }
+    },
+    {
+      name: 'browser_execute_script',
+      description: 'Jalankan custom JavaScript di context halaman aktif untuk DOM query/manipulasi tingkat lanjut',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          script: { type: 'string', description: 'Kode JavaScript yang akan dieksekusi (misal "document.querySelector(\'#my-btn\').click()")' }
+        },
+        required: ['script']
+      }
+    },
+    {
+      name: 'browser_wait_for_selector',
+      description: 'Tunggu elemen dengan CSS Selector muncul di halaman sebelum melanjutkan',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS Selector elemen yang ditunggu (misal "div.chat-reply")' },
+          timeout_ms: { type: 'number', description: 'Batas waktu tunggu dalam milidetik (default 10000)' }
+        },
+        required: ['selector']
+      }
+    },
+    {
+      name: 'browser_open_new_tab',
+      description: 'Buka URL di tab baru yang aktif dan ambil snapshot hasilnya',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL tujuan untuk tab baru' }
+        },
+        required: ['url']
+      }
+    },
+    {
+      name: 'browser_snapshot_sidepanel',
+      description: 'Ambil accessibility tree dari Hermes Bridge sidepanel (Leo AI / control panel)',
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      name: 'browser_sidepanel_click',
+      description: 'Klik elemen di dalam sidepanel berdasarkan ref ID dari snapshot sidepanel (misal "se1")',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: { type: 'string', description: 'Ref ID dari snapshot sidepanel' }
+        },
+        required: ['ref']
+      }
+    },
+    {
+      name: 'browser_sidepanel_type',
+      description: 'Ketik teks ke elemen input di dalam sidepanel berdasarkan ref ID',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ref: { type: 'string', description: 'Ref ID input dari snapshot sidepanel' },
+          text: { type: 'string', description: 'Teks yang akan diketik' }
+        },
+        required: ['ref', 'text']
+      }
     }
   ];
 }

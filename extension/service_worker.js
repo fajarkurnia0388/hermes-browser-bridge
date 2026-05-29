@@ -150,13 +150,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Side Panel
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
-// Respons permintaan status dari sidepanel
+// Respons permintaan status dan event dinamis dari sidepanel
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'GET_STATUS') {
     updateStatus(
       bridgeConnected ? 'Terhubung ke Bridge' : 'Terputus',
       bridgeConnected
     );
+  }
+  if (message.type === 'SIDEPANEL_DOM_CHANGED') {
+    log('Pemberitahuan: DOM Sidepanel berubah secara dinamis.');
   }
 });
 
@@ -250,6 +253,75 @@ const KEY_DEFINITIONS = {
   'F12':        { key: 'F12',       code: 'F12',       keyCode: 123 },
 };
 
+// ============ SIDEPANEL DOM ACCESS & INTERACTION ============
+async function handleSnapshotSidepanel(id) {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'GET_SIDEPANEL_DOM'
+    });
+    
+    if (!response || !response.success) {
+      return errorResponse(id, -32000, response?.error || 'Sidepanel tidak aktif. Buka panel samping ekstensi terlebih dahulu.');
+    }
+    
+    log(`← snapshot_sidepanel: sukses mengambil elemen dari sidepanel`);
+    
+    return okResponse(id, {
+      page_url: 'chrome-extension://sidepanel',
+      page_title: 'Hermes Bridge Sidepanel',
+      snapshot: response.snapshot,
+      screenshot_b64: null,
+      source: 'sidepanel'
+    });
+  } catch (err) {
+    return errorResponse(id, -32000, `Gagal ambil sidepanel: ${err.message}. Pastikan panel samping ekstensi sudah terbuka.`);
+  }
+}
+
+async function handleClickSidepanel(id, params) {
+  const { ref } = params;
+  if (!ref) return errorResponse(id, -32600, "Parameter 'ref' wajib diisi");
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SIDEPANEL_CLICK',
+      ref
+    });
+
+    if (!response || !response.success) {
+      return errorResponse(id, -32001, response?.error || `Ref '${ref}' tidak dapat diklik di sidepanel`);
+    }
+
+    log(`← sidepanel_click ${ref} sukses`);
+    return okResponse(id, { success: true, ref });
+  } catch (err) {
+    return errorResponse(id, -32001, `Gagal klik sidepanel: ${err.message}. Pastikan panel samping ekstensi tetap terbuka.`);
+  }
+}
+
+async function handleTypeSidepanel(id, params) {
+  const { ref, text } = params;
+  if (!ref) return errorResponse(id, -32600, "Parameter 'ref' wajib diisi");
+  if (text == null) return errorResponse(id, -32600, "Parameter 'text' wajib diisi");
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SIDEPANEL_TYPE',
+      ref,
+      text
+    });
+
+    if (!response || !response.success) {
+      return errorResponse(id, -32001, response?.error || `Gagal mengetik di ref '${ref}' di sidepanel`);
+    }
+
+    log(`← sidepanel_type ${ref} sukses: "${text.slice(0, 30)}"`);
+    return okResponse(id, { success: true, ref });
+  } catch (err) {
+    return errorResponse(id, -32001, `Gagal mengetik di sidepanel: ${err.message}. Pastikan panel samping ekstensi tetap terbuka.`);
+  }
+}
+
 // ============ COMMAND DISPATCHER ============
 async function executeCommand(msg) {
   const { id, method, params = {} } = msg;
@@ -258,6 +330,9 @@ async function executeCommand(msg) {
 
   switch (method) {
     case 'browser_snapshot':       return handleSnapshot(id);
+    case 'browser_snapshot_sidepanel': return handleSnapshotSidepanel(id);
+    case 'browser_sidepanel_click': return handleClickSidepanel(id, params);
+    case 'browser_sidepanel_type': return handleTypeSidepanel(id, params);
     case 'browser_click':          return handleClick(id, params);
     case 'browser_type':           return handleType(id, params);
     case 'browser_navigate':       return handleNavigate(id, params);
@@ -268,6 +343,9 @@ async function executeCommand(msg) {
     case 'browser_switch_tab':     return handleSwitchTab(id, params);
     case 'browser_press_key':      return handlePressKey(id, params);
     case 'browser_find_element':   return handleFindElement(id, params);
+    case 'browser_execute_script': return handleExecuteScript(id, params);
+    case 'browser_wait_for_selector': return handleWaitForSelector(id, params);
+    case 'browser_open_new_tab':   return handleOpenNewTab(id, params);
     default:
       return errorResponse(id, -32601, `Method '${method}' tidak dikenali`);
   }
@@ -685,4 +763,114 @@ async function handleSwitchTab(id, params) {
   await new Promise(r => setTimeout(r, 300));
 
   return handleSnapshot(id);
+}
+
+// ============ EXECUTE SCRIPT via CDP / chrome.scripting ============
+async function handleExecuteScript(id, params) {
+  const { script } = params;
+  if (!script) return errorResponse(id, -32600, "Parameter 'script' wajib diisi");
+
+  const tab = await getActiveTab();
+  log(`→ execute_script di tab ${tab.id}`);
+
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (code) => {
+        try {
+          return { success: true, value: window.eval(code) };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      },
+      args: [script]
+    });
+
+    if (res?.result?.success === false) {
+      return errorResponse(id, -32001, `Eval error: ${res.result.error}`);
+    }
+
+    const screenshot = await captureScreenshot(tab.id);
+    return okResponse(id, {
+      success: true,
+      result: res?.result?.value,
+      screenshot_b64: screenshot
+    });
+  } catch (err) {
+    return errorResponse(id, -32001, `Gagal eksekusi script: ${err.message}`);
+  }
+}
+
+// ============ WAIT FOR SELECTOR ============
+async function handleWaitForSelector(id, params) {
+  const { selector, timeout_ms = 10000 } = params;
+  if (!selector) return errorResponse(id, -32600, "Parameter 'selector' wajib diisi");
+
+  const tab = await getActiveTab();
+  log(`→ wait_for_selector: "${selector}" (timeout: ${timeout_ms}ms)`);
+
+  const startTime = Date.now();
+  const pollInterval = 400;
+
+  while (Date.now() - startTime < timeout_ms) {
+    try {
+      const [res] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (sel) => !!document.querySelector(sel),
+        args: [selector]
+      });
+
+      if (res?.result) {
+        const screenshot = await captureScreenshot(tab.id);
+        log(`← wait_for_selector: "${selector}" ditemukan dalam ${Date.now() - startTime}ms`);
+        return okResponse(id, {
+          found: true,
+          elapsed_ms: Date.now() - startTime,
+          screenshot_b64: screenshot
+        });
+      }
+    } catch (e) {
+      // Tab mungkin sedang reload atau navigasi
+    }
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+
+  const screenshot = await captureScreenshot(tab.id);
+  log(`← wait_for_selector: "${selector}" TIMEOUT`);
+  return okResponse(id, {
+    found: false,
+    elapsed_ms: timeout_ms,
+    screenshot_b64: screenshot
+  });
+}
+
+// ============ OPEN NEW TAB ============
+async function handleOpenNewTab(id, params) {
+  const { url } = params;
+  if (!url) return errorResponse(id, -32600, "Parameter 'url' wajib diisi");
+
+  log(`→ open_new_tab: ${url}`);
+  try {
+    const tab = await chrome.tabs.create({ url, active: true });
+    
+    // Tunggu tab selesai dimuat
+    await new Promise((resolve) => {
+      const onUpdated = (tabId, info) => {
+        if (tabId === tab.id && info.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }, 15000);
+    });
+
+    log(`← tab baru ${tab.id} siap. Mengambil snapshot...`);
+    return handleSnapshot(id);
+  } catch (err) {
+    return errorResponse(id, -32001, `Gagal membuka tab baru: ${err.message}`);
+  }
 }

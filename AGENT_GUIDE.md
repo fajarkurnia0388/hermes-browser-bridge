@@ -231,6 +231,96 @@ Pindah ke tab lain. Otomatis mengembalikan snapshot.
 
 ---
 
+### `browser_execute_script`
+Jalankan custom JavaScript di context halaman aktif. Sangat berguna untuk manipulasi DOM tingkat lanjut, trigger custom events, atau bypass proteksi.
+
+| Parameter | Tipe | Wajib | Contoh |
+|-----------|------|:-----:|--------|
+| `script` | string | ✅ | `"document.querySelector('#my-btn').click()"` |
+
+```json
+{"jsonrpc":"2.0","id":"14","method":"browser_execute_script","params":{"script":"document.title"}}
+```
+
+---
+
+### `browser_wait_for_selector`
+Tunggu sampai elemen yang dicocokkan dengan CSS Selector muncul di halaman. Sangat andal untuk menangani Single Page Application (SPA) yang dinamis.
+
+| Parameter | Tipe | Wajib | Default | Contoh |
+|-----------|------|:-----:|---------|--------|
+| `selector` | string | ✅ | | `"div.chat-reply"` |
+| `timeout_ms` | number | ❌ | `10000` | `15000` |
+
+```json
+{"jsonrpc":"2.0","id":"15","method":"browser_wait_for_selector","params":{"selector":"button[disabled=false]","timeout_ms":5000}}
+```
+
+---
+
+### `browser_open_new_tab`
+Buka tab baru yang aktif dengan URL tertentu, dan otomatis mengembalikan snapshot halaman yang baru dibuka setelah selesai dimuat.
+
+| Parameter | Tipe | Wajib | Contoh |
+|-----------|------|:-----:|--------|
+| `url` | string | ✅ | `"https://google.com"` |
+
+```json
+{"jsonrpc":"2.0","id":"16","method":"browser_open_new_tab","params":{"url":"https://github.com"}}
+```
+
+---
+
+### `browser_snapshot_sidepanel`
+Ambil accessibility tree dari panel samping (sidepanel) ekstensi Hermes Bridge (termasuk kontrol panel dan integrasi Leo AI).
+
+```json
+{"jsonrpc":"2.0","id":"17","method":"browser_snapshot_sidepanel","params":{}}
+```
+
+Response:
+```json
+{
+  "result": {
+    "page_url": "chrome-extension://sidepanel",
+    "page_title": "Hermes Bridge Sidepanel",
+    "snapshot": "[se1] button \"Bersihkan Log\"\n[se2] checkbox \"Native Messaging Host\" [checked, disabled]",
+    "source": "sidepanel"
+  }
+}
+```
+
+Setiap elemen interaktif di dalam sidepanel memiliki ref unik dengan prefiks `se` (misal `se1`, `se2`). Gunakan ref ini khusus untuk aksi `browser_sidepanel_*`.
+
+---
+
+### `browser_sidepanel_click`
+Klik elemen di dalam panel samping (sidepanel) berdasarkan ref ID sidepanel (`se*`).
+
+| Parameter | Tipe | Wajib | Contoh |
+|-----------|------|:-----:|--------|
+| `ref` | string | ✅ | `"se1"` |
+
+```json
+{"jsonrpc":"2.0","id":"18","method":"browser_sidepanel_click","params":{"ref":"se1"}}
+```
+
+---
+
+### `browser_sidepanel_type`
+Ketik teks ke elemen input/textarea di dalam panel samping (sidepanel) berdasarkan ref ID sidepanel (`se*`).
+
+| Parameter | Tipe | Wajib | Contoh |
+|-----------|------|:-----:|--------|
+| `ref` | string | ✅ | `"se3"` |
+| `text` | string | ✅ | `"hello sidepanel"` |
+
+```json
+{"jsonrpc":"2.0","id":"19","method":"browser_sidepanel_type","params":{"ref":"se3","text":"Clear all logs"}}
+```
+
+---
+
 ## Pola Kerja
 
 ### Aturan Utama
@@ -332,6 +422,31 @@ Format setiap baris:
 | `-32007` | Screenshot gagal | Halaman chrome:// tidak bisa di-screenshot |
 | `-32600` | Parameter tidak valid | Cek parameter yang dikirim |
 | `-32601` | Method tidak dikenali | Cek nama method |
+
+---
+
+## Penanganan Asisten Bawaan Peramban (Brave Leo, dll.)
+
+> [!IMPORTANT]
+> **Kebijakan Sandbox Browser & Batasan Keamanan:**
+> Ekstensi Chrome/Brave secara ketat diisolasi (sandbox) dan **tidak memiliki izin** untuk mengakses UI asli peramban (*native browser UI shell*). Hal ini mencakup address bar, menu setelan utama, dan panel samping bawaan peramban (seperti *Brave Sidebar* yang menampung Brave Leo, Brave Wallet, Bookmarks, dll.).
+> 
+> Perintah `browser_snapshot_sidepanel()` hanya dapat mengakses halaman sidepanel milik ekstensi itu sendiri (`sidepanel.html`), dan **tidak akan mendeteksi** Brave Leo bawaan peramban.
+
+### Solusi Terbaik & Rekomendasi Alur Kerja:
+Jika Anda perlu berinteraksi dengan asisten bawaan seperti Leo AI, gunakan antarmuka berbasis web publik di tab browser utama alih-alih mencoba mengakses panel samping bawaan:
+
+1. **Gunakan Brave Search Chat (Rekomendasi Utama):**
+   * Buka browser tab baru ke Brave Search:
+     ```json
+     {"jsonrpc":"2.0","id":"101","method":"browser_open_new_tab","params":{"url":"https://search.brave.com"}}
+     ```
+   * Kirim kueri pencarian, lalu gunakan `browser_snapshot` biasa untuk mendeteksi area chat Leo AI yang terintegrasi di sisi kanan halaman web.
+   * Lakukan interaksi penuh (klik textbox, ketik kueri, baca hasil chat) langsung dari DOM halaman tersebut menggunakan `browser_click` dan `browser_type` biasa.
+
+2. **Gunakan Platform Chat AI Berbasis Web Publik Lainnya:**
+   * Jika tidak terbatas pada Brave Leo, gunakan situs chat AI publik (misal ChatGPT, Claude, Gemini, dll.) yang dibuka di tab utama.
+   * Alur ini didukung 100% oleh protokol Chrome DevTools (CDP) di tab aktif, menjamin deteksi elemen yang akurat dan stabil.
 
 ---
 

@@ -1,210 +1,127 @@
 # Hermes Browser Bridge
 
-Jembatan antara AI Agent (LLM) dan browser Chrome yang sudah terbuka & login.
-Agent bisa membaca halaman, klik, ketik, navigasi — tanpa membuka browser baru.
+> **📖 Bahasa Dokumentasi:** [English](README.md) | Bahasa Indonesia
 
-## Arsitektur
+Hermes Browser Bridge menghubungkan AI Agent (LLM) dengan sesi browser Chrome yang sudah terbuka dan login. Agent dapat mengambil snapshot accessibility tree, mengklik, mengetik, menavigasi, dan mengambil screenshot pada tab aktif — tanpa membuka browser baru.
 
-```
-AI Agent (Claude/GPT/Hermes)
-    ↕  stdio (MCP) atau WebSocket
-Bridge Server (Node.js, ws://127.0.0.1:8787)
-    ↕  WebSocket
-Chrome Extension (Manifest V3)
-    ↕  CDP (chrome.debugger) + chrome.scripting
-Tab Aktif (sesi login terjaga)
-```
+## About
 
-## Cara Kerja Singkat
+Repository ini menyediakan integrasi **Hermes Agent** dengan browser pengguna. Agent dijalankan melalui sesi browser sehingga memanfaatkan **fingerprint manusia** untuk autentikasi dan interaksi, memungkinkan workflow otomatis yang lebih natural dan sulit dibedakan dari aktivitas manual. Dengan arsitektur berbasis local bridge, Anda mendapatkan kontrol penuh atas browser tanpa eksposur ke jaringan luar.
 
-1. Agent mengirim perintah JSON-RPC → Bridge menerima dan meneruskan ke Extension
-2. Extension mengambil **Accessibility Tree** halaman via Chrome DevTools Protocol
-3. Setiap elemen interaktif diberi **ref ID** (e.g. `e1`, `e2`, `e3`)
-4. Agent membaca snapshot, memilih ref, dan mengirim aksi (`browser_click`, `browser_type`)
-5. Extension mengeksekusi aksi via CDP `DOM.resolveNode` → hasilnya + screenshot dikirim balik
+## Sorotan
 
-## Prasyarat
+- Transport lokal melalui WebSocket (`ws://127.0.0.1:8787`) dan opsi stdio (MCP).
+- Chrome Extension (Manifest V3) berperan sebagai executor menggunakan Chrome DevTools Protocol (CDP).
+- Dirancang untuk skenario WSL2 (agent di Linux) + Chrome di Windows.
 
-- **Node.js** v18+
-- **Google Chrome** (atau Chromium/Edge) versi 116+
+## Arsitektur (ringkas)
 
-## Instalasi
+AI Agent ⇆ Bridge Server (Node.js) ⇆ Chrome Extension ⇆ Tab Aktif
 
-### 1. Bridge Server
+Bridge bertindak sebagai perantara JSON-RPC/JSON-over-stdio, meneruskan permintaan agent ke extension dan menunggu respons.
+
+## Fitur Utama
+
+- Ambil accessibility tree + screenshot (`browser_snapshot`).
+- Interaksi elemen berbasis `ref` (contoh: `browser_click`, `browser_type`).
+- Tools tambahan: `browser_find_element`, `browser_press_key`, `browser_execute_script`, `browser_tabs`, dll.
+- Keamanan: hanya bind ke `127.0.0.1` (lokal) — tidak mengekspos port ke jaringan.
+
+## Persyaratan
+
+- Node.js v18+
+- Google Chrome / Chromium / Edge v116+
+
+## Quickstart
+
+1. Install dependencies dan jalankan Bridge:
 
 ```bash
 cd bridge/
 npm install
+npm start
 ```
 
-### 2. Chrome Extension
+2. Load extension di Chrome:
 
-1. Buka `chrome://extensions/`
-2. Aktifkan **Developer Mode** (toggle kanan atas)
-3. Klik **Load unpacked**
-4. Pilih folder `extension/`
-5. Catat Extension ID yang muncul (untuk referensi)
+1) Buka `chrome://extensions/`
+2) Aktifkan _Developer mode_
+3) Klik _Load unpacked_ → pilih folder `extension/`
 
-### 3. Jalankan Bridge
+3. Setelah bridge berjalan, ekstensi akan otomatis mencoba terhubung ke `ws://127.0.0.1:8787`.
 
-```bash
-cd bridge/
-node index.js
-```
+## Cara Menggunakan
 
-Anda akan melihat:
-```
-[Bridge] ═══════════════════════════════════════
-[Bridge] Hermes Browser Bridge v0.3.1
-[Bridge] WebSocket: ws://127.0.0.1:8787
-[Bridge] Menunggu koneksi Extension dan Agent...
-[Bridge] ═══════════════════════════════════════
-```
+Contoh JSON-RPC sederhana via WebSocket:
 
-Extension akan otomatis terhubung dalam beberapa detik. Buka Side Panel ekstensi untuk melihat status koneksi.
-
-## Penggunaan
-
-### Via WebSocket (Agent kustom)
-
-Hubungkan WebSocket client ke `ws://127.0.0.1:8787` dan kirim JSON-RPC:
+Request snapshot:
 
 ```json
-{"jsonrpc":"2.0","id":"1","method":"browser_snapshot","params":{}}
+{ "jsonrpc": "2.0", "id": 1, "method": "browser_snapshot", "params": {} }
 ```
 
-Response berisi accessibility tree:
-```
-[e1] heading "Gmail - Inbox"
-  [e2] button "Compose"
-  [e3] link "Inbox (3)"
-  [e4] textbox "Search mail"
-```
-
-Lalu klik elemen:
-```json
-{"jsonrpc":"2.0","id":"2","method":"browser_click","params":{"ref":"e2"}}
-```
-
-### Via MCP/stdio (Claude Desktop, Cursor, VS Code)
-
-Tambahkan ke konfigurasi MCP client Anda:
+Klik elemen berdasarkan `ref`:
 
 ```json
 {
-  "mcpServers": {
-    "hermes-bridge": {
-      "command": "node",
-      "args": ["/path/ke/bridge/index.js"]
-    }
-  }
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "browser_click",
+  "params": { "ref": "e2" }
 }
 ```
 
-## Daftar Tools
+Alternatif: jalankan Bridge sebagai MCP/stdio server untuk integrasi dengan klien seperti Claude Desktop atau Cursor. Contoh konfigurasi ada di dokumentasi MCP client masing-masing.
 
-| Tool | Deskripsi | Parameter |
-|------|-----------|-----------|
-| `browser_snapshot` | Ambil accessibility tree + screenshot | — |
-| `browser_click` | Klik elemen | `ref` (wajib) |
-| `browser_type` | Ketik teks di input | `ref`, `text` (wajib) |
-| `browser_navigate` | Buka URL + auto snapshot | `url` (wajib) |
-| `browser_screenshot` | Ambil screenshot saja | — |
-| `browser_scroll` | Scroll halaman | `direction`, `amount` |
-| `browser_wait` | Tunggu halaman selesai load | `timeout_ms` |
-| `browser_tabs` | List semua tab terbuka | — |
-| `browser_switch_tab` | Pindah tab | `tabId` (wajib) |
+## Daftar Tools (ringkasan)
 
----
+- `browser_snapshot`: ambil accessibility tree + screenshot
+- `browser_click`: klik elemen berdasarkan `ref`
+- `browser_type`: ketik teks ke input berdasarkan `ref`
+- `browser_press_key`: kirim keyboard event
+- `browser_find_element`: cari elemen di snapshot terakhir
+- `browser_navigate`: buka URL dan ambil snapshot
+- `browser_screenshot`: ambil screenshot saja
+- `browser_scroll`, `browser_wait`, `browser_tabs`, `browser_switch_tab`, `browser_execute_script`, `browser_wait_for_selector`, `browser_open_new_tab`
 
-## WSL + Windows: Apakah Bisa?
+Untuk definisi schema tiap tool lihat `bridge/index.js` (fungsi `getToolDefinitions`).
 
-**Ya, bisa.** Arsitektur ini memang dirancang untuk skenario tersebut.
+## WSL2 (Linux agent) + Chrome di Windows
 
-### Cara Kerjanya
-
-```
-┌─── WSL2 (Linux) ──────────────────────┐
-│                                        │
-│  AI Agent → node bridge/index.js       │
-│             (ws://127.0.0.1:8787)      │
-│                                        │
-└────────────────┬───────────────────────┘
-                 │ localhost forwarding
-┌────────────────┴───────────────────────┐
-│                                        │
-│  ┌─── Windows ──────────────────────┐  │
-│  │                                  │  │
-│  │  Chrome Extension                │  │
-│  │  → WebSocket ke ws://localhost:  │  │
-│  │    8787                          │  │
-│  │  → Mengontrol tab browser       │  │
-│  │                                  │  │
-│  └──────────────────────────────────┘  │
-│                                        │
-└────────────────────────────────────────┘
-```
-
-### Langkah Setup WSL
-
-1. **Pastikan WSL2 terbaru** (Windows 11 atau Windows 10 build 19041+)
-
-2. **Aktifkan mirrored networking** (opsional, untuk koneksi paling stabil).
-   Buat/edit file `%USERPROFILE%\.wslconfig`:
-   ```ini
-   [wsl2]
-   networkingMode=mirrored
-   ```
-   Lalu restart WSL: `wsl --shutdown` dari PowerShell.
-
-3. **Jalankan bridge di WSL:**
-   ```bash
-   cd /path/ke/bridge/
-   node index.js
-   ```
-
-4. **Buka Chrome di Windows**, pastikan extension sudah di-load.
-   Extension akan otomatis terhubung ke `ws://localhost:8787`.
-
-### Catatan Penting WSL
-
-| Aspek | Detail |
-|-------|--------|
-| **WSL1** | Localhost langsung shared dengan Windows. Pasti bekerja. |
-| **WSL2 (default NAT)** | Windows otomatis forward `localhost` ke WSL2 sejak build 18945+. Biasanya bekerja, tapi jika tidak, gunakan `networkingMode=mirrored`. |
-| **WSL2 (mirrored)** | Paling stabil. WSL dan Windows berbagi network stack yang sama. |
-| **Firewall** | Jika tidak bisa terhubung, pastikan port 8787 tidak diblokir oleh Windows Firewall. |
-
-### Alternatif: Jalankan Bridge di Windows Juga
-
-Jika localhost forwarding bermasalah, Anda juga bisa menjalankan bridge di sisi Windows dan hanya menghubungkan agent dari WSL via WebSocket:
-
-```powershell
-# Di Windows PowerShell
-cd C:\path\ke\bridge
-node index.js
-```
-
-Lalu dari WSL, hubungkan agent ke `ws://localhost:8787` (WSL2 bisa mengakses port Windows).
-
----
+Arsitektur mendukung agent berjalan di WSL2 dan Chrome di Windows. Bila mengalami masalah koneksi, pertimbangkan opsi `networkingMode=mirrored` di `%USERPROFILE%\.wslconfig` atau jalankan bridge langsung di Windows.
 
 ## Keamanan
 
-- Bridge server **hanya** listen di `127.0.0.1` — tidak bisa diakses dari jaringan luar
-- Extension menggunakan `chrome.debugger` untuk interaksi yang presisi — attach/detach per operasi (tidak persisten)
-- Screenshot hanya dikirim via WebSocket, tidak disimpan ke disk
-- Side Panel menampilkan log semua aktivitas agar user bisa mengaudit aksi agent
+- Bridge hanya mendengarkan di `127.0.0.1`.
+- Extension melakukan attach/detach `chrome.debugger` per operasi.
+- Untuk produksi: tambahkan autentikasi token pada koneksi WebSocket.
 
-> **TODO(security):** Untuk produksi, tambahkan token autentikasi pada koneksi WebSocket
-> antara Extension dan Bridge. Saat ini keamanan mengandalkan binding localhost saja.
+## Pengembangan
 
-## Troubleshooting
+- Entry point server: `bridge/index.js`
+- Paket: lihat `bridge/package.json`
+- Extension Manifest: `extension/manifest.json`
 
-| Masalah | Solusi |
-|---------|--------|
-| Extension tidak terhubung | Pastikan bridge server sudah berjalan (`node index.js`). Cek Side Panel untuk status. |
-| `chrome.debugger` error | Tutup Chrome DevTools di tab target. DevTools dan debugger tidak bisa berjalan bersamaan. |
-| Screenshot kosong/null | Halaman `chrome://`, `edge://`, atau halaman extension tidak bisa di-screenshot. Coba di halaman web biasa. |
-| WSL2 tidak bisa connect | Coba tambahkan `networkingMode=mirrored` di `.wslconfig` dan restart WSL. |
-| Ref tidak ditemukan | Ref bersifat sementara. Selalu jalankan `browser_snapshot` sebelum `browser_click`/`browser_type`. |
+Jika Anda ingin menambahkan fitur baru pada protokol: tambahkan definisi tool di `getToolDefinitions()` di `bridge/index.js` dan implementasikan handling di sisi extension.
+
+## Contributing
+
+Saran kontribusi:
+
+1. Fork repo dan buat branch fitur.
+2. Buka PR dengan deskripsi perubahan dan alasan.
+3. Sertakan contoh manual atau skrip kecil untuk verifikasi fitur.
+
+## License
+
+Lisensi projek belum dispesifikasikan dalam repo. Tambahkan file `LICENSE` jika ingin mengatur lisensi publik.
+
+---
+
+Jika Anda mau, saya bisa:
+
+- Menambahkan contoh payload lengkap untuk tiap tool.
+- Menambahkan badge status build atau license.
+- Menerjemahkan README ini ke Bahasa Inggris.
+
+Silakan beri tahu mana yang ingin Anda tambahkan atau ubah.
